@@ -52,6 +52,13 @@ def dict_key_intersection(dict1, dict2):
     return sorted(keys1 & keys2)
 
 
+def dict_key_union(dict1, dict2):
+    keys1 = set(dict1.keys())
+    keys2 = set(dict2.keys())
+
+    return sorted(keys1 | keys2)
+
+
 def black_draw_polygon(img_w, img_h, polygons):
     white = np.zeros((img_h, img_w), dtype=np.uint8)
     for poly in polygons:
@@ -151,8 +158,9 @@ def main():
     mask_iou_threshold = 0.8
     obj_diou_threshold = 0.8
 
-    ann_file1 = COCO(r"C:\Users\wangyx\Desktop\images\label\annotations.json")
-    ann_file2 = COCO(r"C:\Users\wangyx\Desktop\images\label\annotations.json")
+    ann_file1 = COCO(r"C:\Users\wangyx\Desktop\example\label\annotations.json")
+    ann_file2 = COCO(
+        r"C:\Users\wangyx\Desktop\example\label\annotations_lzy.json")
 
     image_ann_er1 = coco_format_to_image_ann(ann_file1)
     image_ann_er2 = coco_format_to_image_ann(ann_file2)
@@ -162,9 +170,18 @@ def main():
     intersection_images_name = dict_key_intersection(
         image_ann_er1, image_ann_er2)
     for image_name in intersection_images_name:
-        intersection_category_name = dict_key_intersection(
+        union_category_name = dict_key_union(
             image_ann_er1[image_name], image_ann_er2[image_name])
-        for category_name in intersection_category_name:
+        for category_name in union_category_name:
+            if category_name not in image_ann_er1[image_name].keys():
+                print("第一个人的图片{}中缺少{}类别，请检查".format(image_name, category_name))
+                error_num += 1
+                continue
+            elif category_name not in image_ann_er2[image_name].keys():
+                print("第二个人的图片{}中缺少{}类别，请检查".format(image_name, category_name))
+                error_num += 1
+                continue
+
             anner1_obj_id = list(
                 image_ann_er1[image_name][category_name].keys())
             anner2_obj_id = list(
