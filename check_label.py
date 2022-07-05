@@ -39,7 +39,8 @@ def coco_format_to_image_ann(ann_file):
             image_ann[image_name][category_prefix] = {}
         if category_suffix not in image_ann[image_name][category_prefix].keys():
             image_ann[image_name][category_prefix][category_suffix] = []
-        image_ann[image_name][category_prefix][category_suffix].append(segmentation)
+        image_ann[image_name][category_prefix][category_suffix].append(
+            segmentation)
 
     return image_ann
 
@@ -62,7 +63,8 @@ def black_draw_polygon(img_w, img_h, polygons):
 def draw_obj_id(img_h, img_w, img_cat_obj):
     black = np.zeros((img_h, img_w), dtype=np.uint8)
     for object_id in img_cat_obj.keys():
-        cv2.fillPoly(black, [np.array(x, dtype=np.int32).reshape((-1, 2)) for x in img_cat_obj[object_id]], object_id)
+        cv2.fillPoly(black, [np.array(x, dtype=np.int32).reshape(
+            (-1, 2)) for x in img_cat_obj[object_id]], object_id)
 
     return black
 
@@ -74,7 +76,8 @@ def obj_mask_to_iou_matrix(mask1, mask2):
     matrix = np.zeros((h_max, w_max))
     for x in range(1, w_max + 1):
         for y in range(1, h_max + 1):
-            matrix[y - 1, x - 1] = np.sum((mask1 == x) & (mask2 == y)) / np.sum((mask1 == x) | (mask2 == y))
+            matrix[y - 1, x - 1] = np.sum((mask1 == x) & (mask2 == y)) / \
+                np.sum((mask1 == x) | (mask2 == y))
 
     return matrix
 
@@ -130,8 +133,10 @@ def obj_diou(box1, box2):
 
     union_w = max(abs(box1[1][0] - box2[0][0]), abs(box2[1][0] - box1[0][0]))
     union_h = max(abs(box1[1][1] - box2[0][1]), abs(box2[1][1] - box1[0][1]))
-    center_w = abs((box1[1][0] + box1[0][0]) / 2 - (box2[1][0] + box2[0][0]) / 2)
-    center_h = abs((box1[1][1] + box1[0][1]) / 2 - (box2[1][1] + box2[0][1]) / 2)
+    center_w = abs((box1[1][0] + box1[0][0]) / 2 -
+                   (box2[1][0] + box2[0][0]) / 2)
+    center_h = abs((box1[1][1] + box1[0][1]) / 2 -
+                   (box2[1][1] + box2[0][1]) / 2)
 
     return obj_iou(box1, box2) - (center_w ** 2 + center_h ** 2) / (union_w ** 2 + union_h ** 2)
 
@@ -152,27 +157,47 @@ def main():
     image_ann_er1 = coco_format_to_image_ann(ann_file1)
     image_ann_er2 = coco_format_to_image_ann(ann_file2)
 
-    intersection_images_name = dict_key_intersection(image_ann_er1, image_ann_er2)
+    correct_num = 0
+    error_num = 0
+    intersection_images_name = dict_key_intersection(
+        image_ann_er1, image_ann_er2)
     for image_name in intersection_images_name:
-        intersection_category_name = dict_key_intersection(image_ann_er1[image_name], image_ann_er2[image_name])
+        intersection_category_name = dict_key_intersection(
+            image_ann_er1[image_name], image_ann_er2[image_name])
         for category_name in intersection_category_name:
-            anner1_mask = draw_obj_id(height, weight, image_ann_er1[image_name][category_name])
-            anner2_mask = draw_obj_id(height, weight, image_ann_er2[image_name][category_name])
+            anner1_obj_id = list(
+                image_ann_er1[image_name][category_name].keys())
+            anner2_obj_id = list(
+                image_ann_er2[image_name][category_name].keys())
+            anner1_obj = {}
+            anner2_obj = {}
+            for i, obj_id in enumerate(anner1_obj_id):
+                anner1_obj[i+1] = image_ann_er1[image_name][category_name][obj_id]
+            for i, obj_id in enumerate(anner2_obj_id):
+                anner2_obj[i+1] = image_ann_er2[image_name][category_name][obj_id]
+
+            anner1_mask = draw_obj_id(
+                height, weight, anner1_obj)
+            anner2_mask = draw_obj_id(
+                height, weight, anner2_obj)
 
             cost_matrix = obj_mask_to_iou_matrix(anner1_mask, anner2_mask)
             if cost_matrix.shape[0] != cost_matrix.shape[1]:
-                print("图片{}的{}类别两个人标注对向数不对应，请检查目标数".format(image_name, category_name))
+                print("图片{}的{}类别两个人标注对向数不对应，请检查目标数".format(
+                    image_name, category_name))
+                error_num += max(cost_matrix.shape)
                 continue
             rows_ind, cols_ind = linear_sum_assignment(1 - cost_matrix)
             for row_ind, col_ind in zip(rows_ind, cols_ind):
                 obj_iou = cost_matrix[row_ind, col_ind]
                 if obj_iou < mask_iou_threshold:
-                    print("图片{}的{}类别第一个人的目标{}和第二个人的目标{},分割IoU较低:{}, 请检查标注范围".format(
+                    print("图片{}的{}类别第一个人的目标{}和第二个人的目标{}, 分割IoU较低:{}, 请检查标注范围".format(
                         image_name,
                         category_name,
-                        row_ind,
-                        col_ind,
+                        anner1_obj_id[row_ind],
+                        anner2_obj_id[col_ind],
                         obj_iou))
+                    error_num += 1
                     continue
 
                 obj1_nonzero_ind = np.nonzero(anner1_mask == (row_ind + 1))
@@ -192,10 +217,13 @@ def main():
                     print("图片{}的{}类别第一个人的目标{}和第二个人的目标{}分割IoU达标, 但外接框IoU:{}，请检查是否有离散区域影响".format(
                         image_name,
                         category_name,
-                        row_ind,
-                        col_ind,
+                        anner1_obj_id[row_ind],
+                        anner2_obj_id[col_ind],
                         diou))
-                stop = 0
+                    error_num += 1
+                    continue
+                correct_num += 1
+    print(error_num/(correct_num+error_num))
 
 
 if __name__ == '__main__':
